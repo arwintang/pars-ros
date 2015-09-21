@@ -4305,45 +4305,13 @@ extern "C" void *DIF_mf_rosamcl(void *arg1, void *arg2){
   ans = new MoG(name_str);
   *ans = *d1;
 
-  /* Instead of just setting ans equal to whatever d1 was,
-     The actual ros procedure should be called now
-  */
-  //AMCL a("/home/pengtang/catkin_ws/src/stdr_simulator/stdr_resources/maps/map.yaml");
-  //extern AMCL a;
-  AMCL a;
-  vector<double> amcl_decipher;
-  double distance;
-
-  cerr<<"The d1 (mean) is "<< d1->peak[0].mean[0] <<"  "<< d1->peak[0].mean[1]<<endl; 
-  cerr<<"The d2 (mean) is "<< d2->peak[0].mean[0] <<"  "<< d2->peak[0].mean[1]<<endl;
-
-  // Cheat, for now
-  if (d1->peak[0].mean[0] == 0)
-  {
-  	ans->peak[0].mean[0] = 2000;
-  	ans->peak[0].mean[1] = -2000;
-  	ans->peak[0].variance(0,0) = 100000;
-  	ans->peak[0].variance(0,1) = 0;
-  	ans->peak[0].variance(1,0) = 0;
-  	ans->peak[0].variance(1,1) = 100000;
-  	return ans;
-  }
-
-  distance = sqrt(pow(d1->peak[0].mean[0]/1000, 2) +  pow(d2->peak[0].mean[0]/1000, 2));
-  cerr<<" The distance is "<< distance<<endl;
-  amcl_decipher = a.AMCL_run(distance, 0);  
-
-  ans->peak[0].mean[0] = amcl_decipher[0] * 1000;
-  ans->peak[0].mean[1] = -1 * amcl_decipher[1] * 1000;
-
-
-  ans->peak[0].variance(0,0) = pow(sqrt(abs(amcl_decipher[4])) * 1000, 2) ;
-  ans->peak[0].variance(0,1) = pow(sqrt(abs(amcl_decipher[5])) * 1000, 2) ;
-  ans->peak[0].variance(1,0) = pow(sqrt(abs(amcl_decipher[6])) * 1000, 2) ;
-  ans->peak[0].variance(1,1) = pow(sqrt(abs(amcl_decipher[7])) * 1000, 2) ;
 
   return ans; //((void *)&ans[0]);
 }
+
+extern int GlobalTime; // from TSS and problem classes
+static int rosTime= -1;
+static MoG stored_ans;
 
 extern "C" void *DIF_mf_rosamcl2(void *arg1, void *arg2, void *arg3, void *arg4){
 	MoG *ans,*d1,*d2,*d3,*d4;
@@ -4354,10 +4322,20 @@ extern "C" void *DIF_mf_rosamcl2(void *arg1, void *arg2, void *arg3, void *arg4)
 	double PI = 3.14159;
 	string name_str = "rosamcl2("+ ((MoG*)arg1)->distribution_name+","+((MoG*)arg2)->distribution_name+","
 								   + ((MoG*)arg3)->distribution_name+","+((MoG*)arg4)->distribution_name+")";
-
-	cout<<" ROS AMCL2 : "<<name_str<<endl;
+	cout<<" ROSAMCL2 : "<<name_str<<" Time "<<GlobalTime<<endl;
+	
 	ans = new MoG(name_str);
+	if (rosTime==GlobalTime) { // duplicate call, return
+		cout<<"ROSAMCL: Skipping for time "<<GlobalTime<<endl;
+		*ans = stored_ans;
+		return ans;
+	}
 	*ans = *d2;
+
+	ans->peak[0].variance(0,0)=20.0;
+	ans->peak[0].variance(0,1)=0.2;
+	ans->peak[0].variance(1,0)=0.2;
+	ans->peak[0].variance(1,1)=20.0;
 
 	if (d1->peak.size()>1 || d1->peak.size()>1 || d1->peak.size()>1 || d1->peak.size()>1 ) {
 		cout<<"ROSAMCL ERROR; argument has more than one peak\n";
@@ -4369,75 +4347,24 @@ extern "C" void *DIF_mf_rosamcl2(void *arg1, void *arg2, void *arg3, void *arg4)
 	vector<double> amcl_decipher;
 
 	// yforward needs to multiply by -1, since in pars it is multiplied by -1
-	double xforward = d2->peak[0].mean(0) - d1->peak[0].mean(0);
-	double yforward = -1 * (d2->peak[0].mean(1) - d1->peak[0].mean(1));
- 
-	cout<<"Pos done"<<endl;
+	double x_tobe = d2->peak[0].mean(0);
+	double y_tobe = -1 * d2->peak[0].mean(1);
+	double angle_tobe = atan2(-1 * d4->peak[0].mean(1) , d4->peak[0].mean(0));
 
-	double desired_angle = atan2(-1 * d3->peak[0].mean(1) , d3->peak[0].mean(0)); // y,x
-	double previous_angle = atan2(-1 * d4->peak[0].mean(1) , d4->peak[0].mean(0)); // y,x
-	double angle = desired_angle - previous_angle;
+	x_tobe = x_tobe / 1000;
+	y_tobe = y_tobe / 1000;
+	std::cerr<<"x_tobe is "<< x_tobe << " y_tobe is "<< y_tobe << " angle_tobe is "<< angle_tobe <<std::endl;
+  	amcl_decipher = a.AMCL_run(x_tobe, y_tobe, angle_tobe);
 
-	cerr<<"Previous pos is: x: "<< d1->peak[0].mean(0)<<" y: "<<d1->peak[0].mean(1)<<endl;
-	cerr<<"Desired pos is: x: "<< d2->peak[0].mean(0)<<" y: "<<d2->peak[0].mean(1)<<endl;
-	cout<<"ROSAMCL2("<<xforward<<","<<yforward<<","<<angle<<")\n";
+	ans->peak[0].mean[0] = amcl_decipher[0] * 1000;
+	ans->peak[0].mean[1] = -1 * amcl_decipher[1] * 1000;
 
-  // Cheat, for now
-  if (xforward == 0 && yforward == 0)
-  {
-  	return ans;
-  }
-  
-  double my_forward = sqrt(xforward*xforward + yforward*yforward);
-  double angle_needs_spinto = atan2(yforward, xforward);
+    ans->peak[0].variance(0,0) = pow(sqrt(abs(amcl_decipher[4])) * 1000, 2) ;
+    ans->peak[0].variance(0,1) = pow(sqrt(abs(amcl_decipher[5])) * 1000, 2) ;
+    ans->peak[0].variance(1,0) = pow(sqrt(abs(amcl_decipher[6])) * 1000, 2) ;
+    ans->peak[0].variance(1,1) = pow(sqrt(abs(amcl_decipher[7])) * 1000, 2) ;
 
-  // Make sure angle_needs_spinto - old_angle is in [-pi ~ pi)
-   if (angle_needs_spinto - previous_angle - desired_angle > PI)
-   	  while (angle_needs_spinto - previous_angle - desired_angle > PI)
-   	  	  angle_needs_spinto -= 2 * PI;
-   else if (angle_needs_spinto - previous_angle - desired_angle < -1 * PI)
-   	  while (angle_needs_spinto - previous_angle - desired_angle < -1 * PI)
-   	      angle_needs_spinto += 2 * PI;
-
-  std::cerr << "dlibinterface distance x: " << xforward << std::endl;
-  std::cerr << "dlibinterface distance y: " << yforward << std::endl;
-  std::cerr << "dlibinterface distance: " << my_forward << std::endl;
-  std::cerr << "angle_needs_spinto is " << angle_needs_spinto << " previous_angle is  "<<previous_angle<<  "  desired_angle is " << desired_angle<< "  spin angel: " << angle_needs_spinto - previous_angle -desired_angle << std::endl;
-  
-  bool need_spin_again = false;
-  if (std::abs(angle_needs_spinto - desired_angle) > 0.15)
-  {
-  	std::cerr<<"I will spin this time"<<std::endl;
-  	amcl_decipher = a.AMCL_run(0.0, angle_needs_spinto - desired_angle);
-  	need_spin_again = true;
-  }
-  else
-  	std::cerr<<"I will not spin this time"<<std::endl;
-
-  amcl_decipher = a.AMCL_run(my_forward / 1000, 0.0);
-  
-  if (need_spin_again)
-  {
-  	std::cerr<<"I'm spinning back to the original angle"<<std::endl;
-  	amcl_decipher = a.AMCL_run(0.0, desired_angle - angle_needs_spinto);
-  }
-
-  ans->peak[0].mean[0] = amcl_decipher[0] * 1000;
-  ans->peak[0].mean[1] = -1 * amcl_decipher[1] * 1000;
-
-  ans->peak[0].variance(0,0) = pow(sqrt(abs(amcl_decipher[4])) * 1000, 2) ;
-  ans->peak[0].variance(0,1) = pow(sqrt(abs(amcl_decipher[5])) * 1000, 2) ;
-  ans->peak[0].variance(1,0) = pow(sqrt(abs(amcl_decipher[6])) * 1000, 2) ;
-  ans->peak[0].variance(1,1) = pow(sqrt(abs(amcl_decipher[7])) * 1000, 2) ;
-
-
-  /* Instead of just setting ans equal to whatever d1 was,
-     The actual ros procedure should be called now
-     with parameters xforward, yforward and angle
-  */
-
-  // the mean of ans should be set to the returned localized position
-  // the variance of ans should be set to the returned variance
-
-  return ans; //((void *)&ans[0]);
+	stored_ans= *ans;
+	rosTime=GlobalTime;
+	return ans; //((void *)&ans[0]);
 }

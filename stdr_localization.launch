@@ -1,13 +1,26 @@
 <launch>
 	<node pkg = "amcl" type = "amcl" name = "amcl" args="scan:=robot0/laser_0">
+		<param name="use_map_topic" value="false"/>
+		<param name="first_map_only" value="false"/>
+		<param name="global_frame_id" value="map"/>
+		<param name="base_frame_id" value="robot0"/>
+		<param name="odom_frame_id" value="map_static"/>
 		<param name="initial_pose_x" value="2.0"/>
 		<param name="initial_pose_y" value="2.0"/>
-		<param name="initial_pose_a" value="0"/>
+		<param name="initial_pose_a" value="0.0"/>
 		<param name="initial_cov_xx" value="0.1"/>
 		<param name="initial_cov_yy" value="0.1"/>
 		<param name="initial_cov_aa" value="0.0001"/>
-		<param name="update_min_d" value="0.005"/>
-		<param name="update_min_a" value="0.005"/>
-		<param name="min_particles" value="100"/>
+		<param name="update_min_d" value="0.001"/>
+		<param name="update_min_a" value="0.01"/>
+		<param name="min_particles" value="500"/>
+		<param name="max_particles" value="5000"/>
+
+		<param name="odom_model_type" value="diff"/>		
+		<param name="odom_alpha1" value="0.001"/>
+		<param name="odom_alpha2" value="0.001"/>
+		<param name="odom_alpha3" value="0.001"/>
+		<param name="odom_alpha4" value="0.001"/>
+
 	</node>
 </launch>
